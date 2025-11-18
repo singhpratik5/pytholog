@@ -8,6 +8,8 @@ class Fact:
         
     def _parse_fact(self, fact):
         fact = fact.replace(" ", "")
+        # remove trailing dots if present
+        fact = re.sub(r'\.+$', "", fact)
         self.terms = rule_terms(fact)
         if ":-" in fact: 
             if_ind = fact.index(":-")
