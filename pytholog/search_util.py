@@ -56,7 +56,9 @@ def child_to_parent(child, Q): # which is the current goal
     # Substitute child's variables using child's domain to get the "ground" fact it proved
     from .expr import Expr
     child_lh_subst_terms = [substitute_vars(t, child.domain) for t in child_lh.terms]
-    child_lh_subst = Expr(child_lh.predicate + "(" + ",".join(child_lh_subst_terms) + ")")
+    # Convert all terms to strings to avoid type errors
+    child_lh_subst_terms_str = [str(term) for term in child_lh_subst_terms]
+    child_lh_subst = Expr(child_lh.predicate + "(" + ",".join(child_lh_subst_terms_str) + ")")
     
     # Now unify the parent's goal (with parent's domain) with the child's substituted fact (with empty domain)
     # This will bind any remaining variables in the parent's goal to match the child's proven fact

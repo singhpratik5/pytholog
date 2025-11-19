@@ -74,7 +74,10 @@ def unify(lh, rh, lh_domain=None, rh_domain=None):
         subs[key] = value_node
         return True
 
-    def _unify_nodes(a, b):
+    def _unify_nodes(a, b, depth=0):
+        if depth > 50:
+            return False
+        
         a = _deref(a)
         b = _deref(b)
         # if both are the same var node
@@ -100,14 +103,14 @@ def unify(lh, rh, lh_domain=None, rh_domain=None):
                 return False
             head = elems[0]
             tail_list = {'type': 'list', 'elems': elems[1:]}
-            return _unify_nodes(a['head'], head) and _unify_nodes(a['tail'], tail_list)
+            return _unify_nodes(a['head'], head, depth+1) and _unify_nodes(a['tail'], tail_list, depth+1)
         if b['type'] == 'list_pat' and a['type'] == 'list':
             elems = a['elems']
             if len(elems) == 0:
                 return False
             head = elems[0]
             tail_list = {'type': 'list', 'elems': elems[1:]}
-            return _unify_nodes(b['head'], head) and _unify_nodes(b['tail'], tail_list)
+            return _unify_nodes(b['head'], head, depth+1) and _unify_nodes(b['tail'], tail_list, depth+1)
 
         # both lists
         if a['type'] == 'list' and b['type'] == 'list':

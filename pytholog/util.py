@@ -58,7 +58,10 @@ def _split_top_level(s, sep=','):
     return parts
 
 
+_anon_var_counter = 0
+
 def parse_term(token, side=None):
+    global _anon_var_counter
     # similar to the previous _parse_term in unify.py
     if isinstance(token, dict):
         return token
@@ -66,6 +69,10 @@ def parse_term(token, side=None):
         return {'type': 'const', 'value': None}
     t = str(token)
     if is_variable(t):
+        # Handle anonymous variable - each occurrence gets a unique name
+        if t == '_':
+            _anon_var_counter += 1
+            return {'type': 'var', 'side': side, 'name': f'_G{_anon_var_counter}'}
         return {'type': 'var', 'side': side, 'name': t}
     if t.startswith('[') and t.endswith(']'):
         inner = t[1:-1]
@@ -84,9 +91,23 @@ def parse_term(token, side=None):
         if pipe_index >= 0:
             head_tok = inner[:pipe_index]
             tail_tok = inner[pipe_index+1:]
-            head_node = parse_term(head_tok, side)
-            tail_node = parse_term(tail_tok, side)
-            return {'type': 'list_pat', 'head': head_node, 'tail': tail_node}
+            
+            # Check if head has multiple comma-separated elements
+            head_elems = _split_top_level(head_tok, ',')
+            if len(head_elems) > 1:
+                # Multi-element head like [a,b|T] → convert to nested pattern [a|[b|T]]
+                # Build from right to left
+                result = parse_term(tail_tok, side)
+                for elem in reversed(head_elems):
+                    result = {'type': 'list_pat', 
+                             'head': parse_term(elem.strip(), side), 
+                             'tail': result}
+                return result
+            else:
+                # Single element head like [H|T]
+                head_node = parse_term(head_tok, side)
+                tail_node = parse_term(tail_tok, side)
+                return {'type': 'list_pat', 'head': head_node, 'tail': tail_node}
         if inner.strip() == '':
             return {'type': 'list', 'elems': []}
         elems = _split_top_level(inner, ',')
