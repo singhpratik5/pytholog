@@ -194,7 +194,7 @@ def term_checker(expr):
     #if not isinstance(expr, Expr):
     #    expr = Expr(expr)
     terms = expr.terms[:]
-    indx = [x for x,y in enumerate(terms) if y <= "Z"]
+    indx = [x for x,y in enumerate(terms) if is_variable(y)]
     for i in indx:
         ## give the same value for any uppercased variable in the same index
         terms[i] = "Var" + str(i)

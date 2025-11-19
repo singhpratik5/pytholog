@@ -49,24 +49,14 @@ def child_assigned(rl, rulef, currentgoal, Q):
 def child_to_parent(child, Q): # which is the current goal
     parent = child.parent.__copy__() #to ensure that parent's domain is different without affecting children's
     
-    # Get the parent's current goal and the child's proven fact
-    parent_goal = parent.fact.rhs[parent.ind]
-    child_lh = child.fact.lh
-    
-    # Substitute child's variables using child's domain to get the "ground" fact it proved
-    from .expr import Expr
-    child_lh_subst_terms = [substitute_vars(t, child.domain) for t in child_lh.terms]
-    # Convert all terms to strings to avoid type errors
-    child_lh_subst_terms_str = [str(term) for term in child_lh_subst_terms]
-    child_lh_subst = Expr(child_lh.predicate + "(" + ",".join(child_lh_subst_terms_str) + ")")
-    
-    # Now unify the parent's goal (with parent's domain) with the child's substituted fact (with empty domain)
-    # This will bind any remaining variables in the parent's goal to match the child's proven fact
-    uni = unify(parent_goal, child_lh_subst, parent.domain, {})
-    
-    if uni:
-        parent.ind += 1
-        Q.push(parent)
+    # Simply unify parent's current RHS goal with child's LH using their respective domains
+    # This propagates bindings from the child back to the parent
+    unify(parent.fact.rhs[parent.ind], ## unify parent goals
+          child.fact.lh,  ## with their children to go step down
+          parent.domain,
+          child.domain)
+    parent.ind += 1 ## next rh in the same goal object (lateral move) 
+    Q.push(parent) ## add the parent to the queue to be searched
 
 
 def prob_calc(currentgoal, rl, Q):

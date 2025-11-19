@@ -91,8 +91,12 @@ def simple_query(kb, expr):
         first, last = (0, len(search_base))
         
     for i in range(first, last):
+        # Skip rules (facts with RHS) - simple_query should only match facts
+        if len(search_base[i].rhs) > 0:
+            continue
         res = {}
-        uni = unify(expr, Expr(search_base[i].to_string()), res)
+        # Unify with the left-hand side of the fact
+        uni = unify(expr, search_base[i].lh, res)
         if uni:
             if len(res) == 0: result.append("Yes")
             else: result.append(res)
