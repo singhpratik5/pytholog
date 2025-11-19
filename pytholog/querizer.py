@@ -144,17 +144,13 @@ def rule_query(kb, expr, cut, show_path):
         ## get the rh expr from the current goal to look for its predicate in database
         rule = current_goal.fact.rhs[current_goal.ind]
         
-        ## Probabilities and numeric evaluation
-        if rule.predicate == "": ## if there is no predicate
-            prob_calc(current_goal, rule, queue)
-            continue
-        
         # inequality
         if rule.predicate == "neq":
             filter_eq(rule, current_goal, queue)
             continue
             
-        elif rule.predicate in kb.db:
+        # Check if predicate exists in database (including empty predicate for no-arg predicates)
+        if rule.predicate in kb.db:
             ## search relevant buckets so it speeds up search
             rule_f = kb.db[rule.predicate]["facts"]
             if current_goal.parent == None:
@@ -163,6 +159,9 @@ def rule_query(kb, expr, cut, show_path):
             else:
                 # a child to search facts in kb
                 child_assigned(rule, rule_f, current_goal, queue)
+        ## Probabilities and numeric evaluation (arithmetic expressions with no predicate)
+        elif rule.predicate == "": ## if there is no predicate and it's not in db
+            prob_calc(current_goal, rule, queue)
     
     answer = answer_handler(answer)
     

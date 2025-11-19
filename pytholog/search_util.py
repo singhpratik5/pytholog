@@ -2,6 +2,7 @@ from .unify import unify
 from .goal import Goal
 from .util import prob_parser, substitute_vars
 from .fact import Fact
+import re
        
 def parent_inherits(rl, rulef, currentgoal, Q):
     for f in range(len(rulef)): ## loop over corresponding rules
@@ -61,21 +62,34 @@ def child_to_parent(child, Q): # which is the current goal
 
 def prob_calc(currentgoal, rl, Q):
     ## Probabilities and numeric evaluation
-    key, value = prob_parser(currentgoal.domain, rl.to_string(), rl.terms)
-    ## eval the mathematic operation
-    value = eval(value)
-    if value == True: 
-        value = currentgoal.domain.get(key)
-        ## it is true but there is no key in the domain (helpful for ML rules in future)
-        if value is None:
-            value = "Yes"
-    elif value == False:
-        value = "No"
-    currentgoal.domain[key] = value ## assign a new key in the domain with the evaluated value
-    prob_child = Goal(Fact(rl.to_string()),
-                      parent = currentgoal,
-                      domain = currentgoal.domain)
-    Q.push(prob_child)
+    rule_str = rl.to_string()
+    
+    # Check if this is an assignment (has "is") or just a constraint check
+    if "is" in rule_str:
+        # Assignment: Var is Expression
+        key, value = prob_parser(currentgoal.domain, rule_str, rl.terms)
+        value = eval(value)
+        currentgoal.domain[key] = value  # Bind the variable to the result
+        prob_child = Goal(Fact(rule_str),
+                          parent = currentgoal,
+                          domain = currentgoal.domain)
+        Q.push(prob_child)
+    else:
+        # Constraint check: Expression (e.g., X > 5)
+        # Substitute all variables and evaluate
+        value = rule_str
+        for term in rl.terms:
+            if term in currentgoal.domain:
+                value = re.sub(term, str(currentgoal.domain[term]), value)
+        result = eval(value)
+        
+        # Only continue if the constraint is satisfied
+        if result:
+            prob_child = Goal(Fact(rule_str),
+                              parent = currentgoal,
+                              domain = currentgoal.domain)
+            Q.push(prob_child)
+        # If result is False, don't push anything - this path fails
 
 
 def fact_binary_search(facts, key):

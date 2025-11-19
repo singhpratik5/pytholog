@@ -67,6 +67,15 @@ def parse_term(token, side=None):
         return token
     if token is None:
         return {'type': 'const', 'value': None}
+    
+    # Preserve numeric types - don't convert to string
+    if isinstance(token, (int, float)):
+        return {'type': 'const', 'value': token}
+    
+    # Preserve boolean types
+    if isinstance(token, bool):
+        return {'type': 'const', 'value': token}
+    
     t = str(token)
     if is_variable(t):
         # Handle anonymous variable - each occurrence gets a unique name
