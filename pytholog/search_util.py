@@ -11,9 +11,11 @@ def parent_inherits(rl, rulef, currentgoal, Q):
         ## a father goal is the rule we need to search inheriting the domain of the grandfather    
         father = Goal(rulef[f], currentgoal)
         ## unify current rule fact lh with father rhs to get grandfather domain inherited
+        # Use a COPY of currentgoal.domain to avoid polluting it with bindings from failed unifications
+        currentgoal_domain_copy = currentgoal.domain.copy()
         uni = unify(rulef[f].lh, rl,
             father.domain, ## saving in father domain
-            currentgoal.domain) ## using current goal domain (query input)
+            currentgoal_domain_copy) ## using current goal domain (query input)
         if uni:
             Q.push(father) ## if unify succeeds add father to queue to be searched
         

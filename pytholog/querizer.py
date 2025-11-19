@@ -67,13 +67,10 @@ def querizer(simple_query):
                 for i in kb.db[pred]["goals"]:
                     goals_len += len(i)
                 if goals_len == 0:
+                    # Only simple facts, no rules - use simple_query
                     return simple_query(kb, arg1)
                 else:
-                    # Try simple query first for ground queries
-                    simple_res = simple_query(kb, arg1)
-                    # if facts give an answer return it, otherwise use rule search
-                    if not (len(simple_res) == 1 and simple_res[0] == "No"):
-                        return simple_res
+                    # There are rules - use rule_query which will find both facts and rule results
                     return rule_query(kb, arg1, cut, show_path)
         return prepare_query 
     return wrap 
