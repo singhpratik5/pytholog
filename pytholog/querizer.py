@@ -69,6 +69,11 @@ def querizer(simple_query):
                 if goals_len == 0:
                     return simple_query(kb, arg1)
                 else:
+                    # Try simple query first for ground queries
+                    simple_res = simple_query(kb, arg1)
+                    # if facts give an answer return it, otherwise use rule search
+                    if not (len(simple_res) == 1 and simple_res[0] == "No"):
+                        return simple_res
                     return rule_query(kb, arg1, cut, show_path)
         return prepare_query 
     return wrap 
@@ -108,23 +113,22 @@ def rule_query(kb, expr, cut, show_path):
     start.fact.rhs = [expr]
     queue = SearchQueue() ## start the queue and fill with first random point
     queue.push(start)
+    loop_counter = 0
+    MAX_LOOPS = 2000
     while not queue.empty: ## keep searching until it is empty meaning nothing left to be searched
         current_goal = queue.pop()
-        
+        loop_counter += 1
+        if loop_counter % 200 == 0:
+            print(f"[DEBUG] loop {loop_counter}, queue size approx unknown, current goal: {current_goal.fact} ind={current_goal.ind} domain={current_goal.domain}")
+        if loop_counter > MAX_LOOPS:
+            print(f"[DEBUG] reached max loop {MAX_LOOPS}, aborting search to avoid infinite loop")
+            break
         if current_goal.ind >= len(current_goal.fact.rhs): ## all rule goals have been searched
             if current_goal.parent == None: ## no more parents 
                 if current_goal.domain:  ## if there is an answer return it
-                    # Filter out incomplete bindings that still contain list-pattern placeholders
-                    # (e.g. values like '[H|T]') which indicate a partially resolved pattern.
-                    invalid = False
-                    for v in current_goal.domain.values():
-                        if isinstance(v, str) and '|' in v:
-                            invalid = True
-                            break
-                    if not invalid:
-                        answer.append(current_goal.domain)
+                    answer.append(current_goal.domain)
                     if cut: break
-                else:
+                else: 
                     answer.append("Yes") ## if no returns Yes
                 continue ## if no answer found go back to the parent a step above again    
             

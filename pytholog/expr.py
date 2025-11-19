@@ -15,37 +15,41 @@ class Expr:
         self.terms = fact[pred_ind:]
         to_remove = str.maketrans("", "", "() ")
         self.terms = self.terms.translate(to_remove)
-        if self.predicate == "":
+        if self.predicate == "": 
             self.terms = re.split(splitting, self.terms)
-        else:
-            # split on commas at top-level only (ignore commas inside brackets or nested parentheses)
-            terms = []
-            buf = ''
-            depth_paren = 0
-            depth_brack = 0
-            for ch in self.terms:
-                if ch == '(':
-                    depth_paren += 1
-                    buf += ch
-                elif ch == ')':
-                    depth_paren = max(depth_paren - 1, 0)
-                    buf += ch
-                elif ch == '[':
-                    depth_brack += 1
-                    buf += ch
-                elif ch == ']':
-                    depth_brack = max(depth_brack - 1, 0)
-                    buf += ch
-                elif ch == ',' and depth_paren == 0 and depth_brack == 0:
-                    terms.append(buf)
-                    buf = ''
-                else:
-                    buf += ch
-            if buf != '':
-                terms.append(buf)
-            self.terms = terms
+        else: 
+            # Safe term splitting: only split on commas at top level (not inside brackets/parens)
+            self.terms = self._split_terms(self.terms)
         self.string = self.f
         self.index = 0
+    
+    def _split_terms(self, terms_str):
+        """Split terms on commas, but only at top level (not inside brackets or parentheses)."""
+        if not terms_str:
+            return []
+        
+        terms = []
+        current = []
+        depth = 0
+        
+        for char in terms_str:
+            if char in '([':
+                depth += 1
+                current.append(char)
+            elif char in ')]':
+                depth = max(0, depth - 1)
+                current.append(char)
+            elif char == ',' and depth == 0:
+                if current:
+                    terms.append(''.join(current))
+                    current = []
+            else:
+                current.append(char)
+        
+        if current:
+            terms.append(''.join(current))
+        
+        return terms
     
     ## return string value of the expr in case we need it elsewhere with different type
     def to_string(self):
