@@ -8,15 +8,17 @@ from bisect import insort
 ## the facts were defined in the knowledge base.
 class SearchQueue():
     def __init__(self):
-        self._container = deque()  ## deque() not list [] 
-                                   ## the idea is to pop from the left side
+        # Use deque as a stack to implement LIFO (depth-first) search
+        # Prolog uses depth-first search with backtracking; using LIFO makes
+        # the engine explore clause bodies in a Prolog-like order.
+        self._container = deque()
     @property
     def empty(self):
         return not self._container
     def push(self, expr):
         self._container.append(expr)
     def pop(self):
-        return self._container.popleft() # FIFO popping from the left is O(1) in deque() unlike in list
+        return self._container.pop()  # LIFO pop: depth-first search
     def __repr__(self):
         return repr(self._container)
         

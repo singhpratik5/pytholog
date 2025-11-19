@@ -6,34 +6,51 @@ from .unify import unify
 from functools import wraps #, lru_cache
 from .pq import SearchQueue
 from .search_util import *
+# importing deepcopy 
+from copy import deepcopy
+
 
 ## memory decorator which will be called first once .query() method is called
 ## it takes the Expr and checks in cache {} whether it exists or not
 def memory(querizer):
-    #cache = {}
+
     @wraps(querizer)
     def memorize_query(kb, arg1, cut, show_path):
-        temp_cache = {}
-        #original, look_up = term_checker(arg1)
+
+        # canonicalize query to a lookup key
         indx, look_up = term_checker(arg1)
+
+        # If we have cached results, deep-copy them so we never mutate cache entries
         if look_up in kb._cache:
-            #return cache[look_up]
-            temp_cache = kb._cache[look_up] ## if it already exists return it
+            cached = deepcopy(kb._cache[look_up])
         else:
-            new_entry = querizer(kb, arg1, cut, show_path)  ## if not give it to querizer decorator
-            kb._cache[look_up] = new_entry
-            temp_cache = new_entry
-            #return new_entry
-        for d in temp_cache:
-            ## temp_cache takes care of changing constant var names in cache
-            ## to the variable names use by the user
+            # compute results and store a deep-copy in cache
+            new_entry = querizer(kb, arg1, cut, show_path)
+            kb._cache[look_up] = deepcopy(new_entry)
+            cached = deepcopy(new_entry)
+
+        # Now produce results adapted to the current query variable names
+        adapted_results = []
+
+        for d in cached:
+            # only dict results (variable bindings) need remapping
             if isinstance(d, dict):
-                old = list(d.keys())
-                #for i in range(len(arg1.terms)):
-                for i,j in zip(indx, range(len(old))):
-                    d[arg1.terms[i]] = d.pop(old[j])                      
-        return temp_cache    
+                old_keys = list(d.keys())
+                # Build a fresh dict mapping the current query's vars to the cached values
+                newd = {}
+                # The existing logic appears to map positions in `indx` to keys in the cached dict.
+                # Reuse same mapping but operate on a fresh dict.
+                for i, j in zip(indx, range(len(old_keys))):
+                    newd[arg1.terms[i]] = d[old_keys[j]]
+                adapted_results.append(newd)
+            else:
+                # leave non-dict (e.g., 'No' or other markers) unchanged
+                adapted_results.append(d)
+
+        return adapted_results
+
     return memorize_query
+
 
 ## querizer decorator is called whenever there's a new query
 ## it wraps two functions: simple and rule query
@@ -52,6 +69,11 @@ def querizer(simple_query):
                 if goals_len == 0:
                     return simple_query(kb, arg1)
                 else:
+                    # Try simple query first for ground queries
+                    simple_res = simple_query(kb, arg1)
+                    # if facts give an answer return it, otherwise use rule search
+                    if not (len(simple_res) == 1 and simple_res[0] == "No"):
+                        return simple_res
                     return rule_query(kb, arg1, cut, show_path)
         return prepare_query 
     return wrap 
@@ -91,8 +113,16 @@ def rule_query(kb, expr, cut, show_path):
     start.fact.rhs = [expr]
     queue = SearchQueue() ## start the queue and fill with first random point
     queue.push(start)
+    loop_counter = 0
+    MAX_LOOPS = 2000
     while not queue.empty: ## keep searching until it is empty meaning nothing left to be searched
         current_goal = queue.pop()
+        loop_counter += 1
+        if loop_counter % 200 == 0:
+            print(f"[DEBUG] loop {loop_counter}, queue size approx unknown, current goal: {current_goal.fact} ind={current_goal.ind} domain={current_goal.domain}")
+        if loop_counter > MAX_LOOPS:
+            print(f"[DEBUG] reached max loop {MAX_LOOPS}, aborting search to avoid infinite loop")
+            break
         if current_goal.ind >= len(current_goal.fact.rhs): ## all rule goals have been searched
             if current_goal.parent == None: ## no more parents 
                 if current_goal.domain:  ## if there is an answer return it

@@ -15,10 +15,41 @@ class Expr:
         self.terms = fact[pred_ind:]
         to_remove = str.maketrans("", "", "() ")
         self.terms = self.terms.translate(to_remove)
-        if self.predicate == "": self.terms = re.split(splitting, self.terms)
-        else: self.terms = self.terms.split(",")
+        if self.predicate == "": 
+            self.terms = re.split(splitting, self.terms)
+        else: 
+            # Safe term splitting: only split on commas at top level (not inside brackets/parens)
+            self.terms = self._split_terms(self.terms)
         self.string = self.f
         self.index = 0
+    
+    def _split_terms(self, terms_str):
+        """Split terms on commas, but only at top level (not inside brackets or parentheses)."""
+        if not terms_str:
+            return []
+        
+        terms = []
+        current = []
+        depth = 0
+        
+        for char in terms_str:
+            if char in '([':
+                depth += 1
+                current.append(char)
+            elif char in ')]':
+                depth = max(0, depth - 1)
+                current.append(char)
+            elif char == ',' and depth == 0:
+                if current:
+                    terms.append(''.join(current))
+                    current = []
+            else:
+                current.append(char)
+        
+        if current:
+            terms.append(''.join(current))
+        
+        return terms
     
     ## return string value of the expr in case we need it elsewhere with different type
     def to_string(self):
