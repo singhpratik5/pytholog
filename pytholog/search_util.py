@@ -41,9 +41,11 @@ def child_assigned(rl, rulef, currentgoal, Q):
             child = Goal(rulef[f], currentgoal)
             
             ## unify current rule fact lh with current goal rhs to get child domain
+            # Use a COPY of currentgoal.domain to avoid polluting it
+            currentgoal_domain_copy = currentgoal.domain.copy()
             uni = unify(rulef[f].lh, rl,
                         child.domain, ## saving in child domain
-                        currentgoal.domain) ## using current goal domain
+                        currentgoal_domain_copy) ## using current goal domain
             
             if uni:
                 Q.push(child) ## if unify succeeds add child to queue to be searched
