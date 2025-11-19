@@ -1,6 +1,6 @@
 from .unify import unify
 from .goal import Goal
-from .util import prob_parser
+from .util import prob_parser, substitute_vars
 from .fact import Fact
        
 def parent_inherits(rl, rulef, currentgoal, Q):
@@ -11,9 +11,10 @@ def parent_inherits(rl, rulef, currentgoal, Q):
         father = Goal(rulef[f], currentgoal)
         ## unify current rule fact lh with father rhs to get grandfather domain inherited
         uni = unify(rulef[f].lh, rl,
-                    father.domain, ## saving in father domain
-                    currentgoal.domain) ## using current goal domain (query input)
-        if uni: Q.push(father) ## if unify succeeds add father to queue to be searched
+            father.domain, ## saving in father domain
+            currentgoal.domain) ## using current goal domain (query input)
+        if uni:
+            Q.push(father) ## if unify succeeds add father to queue to be searched
         
 def child_assigned(rl, rulef, currentgoal, Q):   
     if len(currentgoal.domain) == 0 or all(i not in currentgoal.domain for i in rl.terms):
@@ -24,30 +25,46 @@ def child_assigned(rl, rulef, currentgoal, Q):
             child = Goal(rulef[f], currentgoal)
             ### if there is nothing to unify then push to the queue directly
             Q.push(child)
+            
     else:
-        key = currentgoal.domain.get(rl.terms[rl.index])
-        if not key or rulef[0].rhs: first, last = (0, len(rulef))
-        else:
-            first, last = fact_binary_search(rulef, key)
+        # Use a full scan over candidate facts when we have domain info.
+        # Binary-search optimization is fragile when facts contain variables or list-structures,
+        # and can miss valid candidates. A full scan is correct and simpler.
+        first, last = (0, len(rulef))
         for f in range(first, last): ## loop over only corresponding facts
             ## take only the ones with the same predicate and same number of terms
             if len(rl.terms) != len(rulef[f].lh.terms): continue
             ## a child goal from the current fact with current goal as parent    
             child = Goal(rulef[f], currentgoal)
+            
             ## unify current rule fact lh with current goal rhs to get child domain
             uni = unify(rulef[f].lh, rl,
                         child.domain, ## saving in child domain
                         currentgoal.domain) ## using current goal domain
-            if uni: Q.push(child) ## if unify succeeds add child to queue to be searched
+            
+            if uni:
+                Q.push(child) ## if unify succeeds add child to queue to be searched
+                
             
 def child_to_parent(child, Q): # which is the current goal
     parent = child.parent.__copy__() #to ensure that parent's domain is different without affecting children's
-    unify(parent.fact.rhs[parent.ind], ## unify parent goals
-          child.fact.lh,  ## with their children to go step down
-          parent.domain,
-          child.domain)
-    parent.ind += 1 ## next rh in the same goal object (lateral move) 
-    Q.push(parent) ## add the parent to the queue to be searched
+    
+    # Get the parent's current goal and the child's proven fact
+    parent_goal = parent.fact.rhs[parent.ind]
+    child_lh = child.fact.lh
+    
+    # Substitute child's variables using child's domain to get the "ground" fact it proved
+    from .expr import Expr
+    child_lh_subst_terms = [substitute_vars(t, child.domain) for t in child_lh.terms]
+    child_lh_subst = Expr(child_lh.predicate + "(" + ",".join(child_lh_subst_terms) + ")")
+    
+    # Now unify the parent's goal (with parent's domain) with the child's substituted fact (with empty domain)
+    # This will bind any remaining variables in the parent's goal to match the child's proven fact
+    uni = unify(parent_goal, child_lh_subst, parent.domain, {})
+    
+    if uni:
+        parent.ind += 1
+        Q.push(parent)
 
 
 def prob_calc(currentgoal, rl, Q):

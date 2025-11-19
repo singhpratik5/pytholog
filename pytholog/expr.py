@@ -15,8 +15,35 @@ class Expr:
         self.terms = fact[pred_ind:]
         to_remove = str.maketrans("", "", "() ")
         self.terms = self.terms.translate(to_remove)
-        if self.predicate == "": self.terms = re.split(splitting, self.terms)
-        else: self.terms = self.terms.split(",")
+        if self.predicate == "":
+            self.terms = re.split(splitting, self.terms)
+        else:
+            # split on commas at top-level only (ignore commas inside brackets or nested parentheses)
+            terms = []
+            buf = ''
+            depth_paren = 0
+            depth_brack = 0
+            for ch in self.terms:
+                if ch == '(':
+                    depth_paren += 1
+                    buf += ch
+                elif ch == ')':
+                    depth_paren = max(depth_paren - 1, 0)
+                    buf += ch
+                elif ch == '[':
+                    depth_brack += 1
+                    buf += ch
+                elif ch == ']':
+                    depth_brack = max(depth_brack - 1, 0)
+                    buf += ch
+                elif ch == ',' and depth_paren == 0 and depth_brack == 0:
+                    terms.append(buf)
+                    buf = ''
+                else:
+                    buf += ch
+            if buf != '':
+                terms.append(buf)
+            self.terms = terms
         self.string = self.f
         self.index = 0
     

@@ -25,6 +25,5 @@ def unify(lh, rh, lh_domain = None, rh_domain = None):
         if rh_val:    # fact or variable in search
             if lh_eval(rh_val, lh_arg, lh_domain) == False:
                 return False
-    
     return True
     
