@@ -67,13 +67,10 @@ def querizer(simple_query):
                 for i in kb.db[pred]["goals"]:
                     goals_len += len(i)
                 if goals_len == 0:
+                    # Only simple facts, no rules - use simple_query
                     return simple_query(kb, arg1)
                 else:
-                    # Try simple query first for ground queries
-                    simple_res = simple_query(kb, arg1)
-                    # if facts give an answer return it, otherwise use rule search
-                    if not (len(simple_res) == 1 and simple_res[0] == "No"):
-                        return simple_res
+                    # There are rules - use rule_query which will find both facts and rule results
                     return rule_query(kb, arg1, cut, show_path)
         return prepare_query 
     return wrap 
@@ -91,8 +88,12 @@ def simple_query(kb, expr):
         first, last = (0, len(search_base))
         
     for i in range(first, last):
+        # Skip rules (facts with RHS) - simple_query should only match facts
+        if len(search_base[i].rhs) > 0:
+            continue
         res = {}
-        uni = unify(expr, Expr(search_base[i].to_string()), res)
+        # Unify with the left-hand side of the fact
+        uni = unify(expr, search_base[i].lh, res)
         if uni:
             if len(res) == 0: result.append("Yes")
             else: result.append(res)
@@ -140,17 +141,13 @@ def rule_query(kb, expr, cut, show_path):
         ## get the rh expr from the current goal to look for its predicate in database
         rule = current_goal.fact.rhs[current_goal.ind]
         
-        ## Probabilities and numeric evaluation
-        if rule.predicate == "": ## if there is no predicate
-            prob_calc(current_goal, rule, queue)
-            continue
-        
         # inequality
         if rule.predicate == "neq":
             filter_eq(rule, current_goal, queue)
             continue
             
-        elif rule.predicate in kb.db:
+        # Check if predicate exists in database (including empty predicate for no-arg predicates)
+        if rule.predicate in kb.db:
             ## search relevant buckets so it speeds up search
             rule_f = kb.db[rule.predicate]["facts"]
             if current_goal.parent == None:
@@ -159,6 +156,9 @@ def rule_query(kb, expr, cut, show_path):
             else:
                 # a child to search facts in kb
                 child_assigned(rule, rule_f, current_goal, queue)
+        ## Probabilities and numeric evaluation (arithmetic expressions with no predicate)
+        elif rule.predicate == "": ## if there is no predicate and it's not in db
+            prob_calc(current_goal, rule, queue)
     
     answer = answer_handler(answer)
     

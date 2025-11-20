@@ -67,6 +67,15 @@ def parse_term(token, side=None):
         return token
     if token is None:
         return {'type': 'const', 'value': None}
+    
+    # Preserve numeric types - don't convert to string
+    if isinstance(token, (int, float)):
+        return {'type': 'const', 'value': token}
+    
+    # Preserve boolean types
+    if isinstance(token, bool):
+        return {'type': 'const', 'value': token}
+    
     t = str(token)
     if is_variable(t):
         # Handle anonymous variable - each occurrence gets a unique name
@@ -194,7 +203,7 @@ def term_checker(expr):
     #if not isinstance(expr, Expr):
     #    expr = Expr(expr)
     terms = expr.terms[:]
-    indx = [x for x,y in enumerate(terms) if y <= "Z"]
+    indx = [x for x,y in enumerate(terms) if is_variable(y)]
     for i in indx:
         ## give the same value for any uppercased variable in the same index
         terms[i] = "Var" + str(i)

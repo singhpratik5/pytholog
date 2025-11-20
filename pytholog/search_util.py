@@ -2,6 +2,7 @@ from .unify import unify
 from .goal import Goal
 from .util import prob_parser, substitute_vars
 from .fact import Fact
+import re
        
 def parent_inherits(rl, rulef, currentgoal, Q):
     for f in range(len(rulef)): ## loop over corresponding rules
@@ -10,9 +11,11 @@ def parent_inherits(rl, rulef, currentgoal, Q):
         ## a father goal is the rule we need to search inheriting the domain of the grandfather    
         father = Goal(rulef[f], currentgoal)
         ## unify current rule fact lh with father rhs to get grandfather domain inherited
+        # Use a COPY of currentgoal.domain to avoid polluting it with bindings from failed unifications
+        currentgoal_domain_copy = currentgoal.domain.copy()
         uni = unify(rulef[f].lh, rl,
             father.domain, ## saving in father domain
-            currentgoal.domain) ## using current goal domain (query input)
+            currentgoal_domain_copy) ## using current goal domain (query input)
         if uni:
             Q.push(father) ## if unify succeeds add father to queue to be searched
         
@@ -38,9 +41,11 @@ def child_assigned(rl, rulef, currentgoal, Q):
             child = Goal(rulef[f], currentgoal)
             
             ## unify current rule fact lh with current goal rhs to get child domain
+            # Use a COPY of currentgoal.domain to avoid polluting it
+            currentgoal_domain_copy = currentgoal.domain.copy()
             uni = unify(rulef[f].lh, rl,
                         child.domain, ## saving in child domain
-                        currentgoal.domain) ## using current goal domain
+                        currentgoal_domain_copy) ## using current goal domain
             
             if uni:
                 Q.push(child) ## if unify succeeds add child to queue to be searched
@@ -49,43 +54,46 @@ def child_assigned(rl, rulef, currentgoal, Q):
 def child_to_parent(child, Q): # which is the current goal
     parent = child.parent.__copy__() #to ensure that parent's domain is different without affecting children's
     
-    # Get the parent's current goal and the child's proven fact
-    parent_goal = parent.fact.rhs[parent.ind]
-    child_lh = child.fact.lh
-    
-    # Substitute child's variables using child's domain to get the "ground" fact it proved
-    from .expr import Expr
-    child_lh_subst_terms = [substitute_vars(t, child.domain) for t in child_lh.terms]
-    # Convert all terms to strings to avoid type errors
-    child_lh_subst_terms_str = [str(term) for term in child_lh_subst_terms]
-    child_lh_subst = Expr(child_lh.predicate + "(" + ",".join(child_lh_subst_terms_str) + ")")
-    
-    # Now unify the parent's goal (with parent's domain) with the child's substituted fact (with empty domain)
-    # This will bind any remaining variables in the parent's goal to match the child's proven fact
-    uni = unify(parent_goal, child_lh_subst, parent.domain, {})
-    
-    if uni:
-        parent.ind += 1
-        Q.push(parent)
+    # Simply unify parent's current RHS goal with child's LH using their respective domains
+    # This propagates bindings from the child back to the parent
+    unify(parent.fact.rhs[parent.ind], ## unify parent goals
+          child.fact.lh,  ## with their children to go step down
+          parent.domain,
+          child.domain)
+    parent.ind += 1 ## next rh in the same goal object (lateral move) 
+    Q.push(parent) ## add the parent to the queue to be searched
 
 
 def prob_calc(currentgoal, rl, Q):
     ## Probabilities and numeric evaluation
-    key, value = prob_parser(currentgoal.domain, rl.to_string(), rl.terms)
-    ## eval the mathematic operation
-    value = eval(value)
-    if value == True: 
-        value = currentgoal.domain.get(key)
-        ## it is true but there is no key in the domain (helpful for ML rules in future)
-        if value is None:
-            value = "Yes"
-    elif value == False:
-        value = "No"
-    currentgoal.domain[key] = value ## assign a new key in the domain with the evaluated value
-    prob_child = Goal(Fact(rl.to_string()),
-                      parent = currentgoal,
-                      domain = currentgoal.domain)
-    Q.push(prob_child)
+    rule_str = rl.to_string()
+    
+    # Check if this is an assignment (has "is") or just a constraint check
+    if "is" in rule_str:
+        # Assignment: Var is Expression
+        key, value = prob_parser(currentgoal.domain, rule_str, rl.terms)
+        value = eval(value)
+        currentgoal.domain[key] = value  # Bind the variable to the result
+        prob_child = Goal(Fact(rule_str),
+                          parent = currentgoal,
+                          domain = currentgoal.domain)
+        Q.push(prob_child)
+    else:
+        # Constraint check: Expression (e.g., X > 5)
+        # Substitute all variables and evaluate
+        value = rule_str
+        for term in rl.terms:
+            if term in currentgoal.domain:
+                value = re.sub(term, str(currentgoal.domain[term]), value)
+        result = eval(value)
+        
+        # Only continue if the constraint is satisfied
+        if result:
+            prob_child = Goal(Fact(rule_str),
+                              parent = currentgoal,
+                              domain = currentgoal.domain)
+            Q.push(prob_child)
+        # If result is False, don't push anything - this path fails
 
 
 def fact_binary_search(facts, key):
