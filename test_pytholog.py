@@ -23,7 +23,7 @@ def test_dishes():
     answer = {"What": "cookie"}
     query = food_kb.query(pl.Expr("food_flavor(What, sweet)"))
     assert answer in query
-    
+
 def test_friends():
     friends_kb = pl.KnowledgeBase("friends")
     friends_kb([
@@ -46,7 +46,7 @@ def test_friends():
     assert david in friends_kb.query(pl.Expr("to_smoke(Who, P)"))
     dan_reb = [{'Who': 'rebecca', 'P': '0.4'}, {'Who': 'daniel', 'P': 0.024000000000000004}]
     assert all(i in friends_kb.query(pl.Expr("to_have_asthma(Who, P)")) for i in dan_reb)
-    
+
 def test_iris():
     iris_kb = pl.KnowledgeBase("iris")
     iris_kb(["species(setosa, Truth) :- petal_width(W), Truth is W <= 0.80", 
@@ -69,4 +69,22 @@ def test_graph():
 
     query = graph.query(pl.Expr("path(a, e, W)"), cut = True)
     assert [d.get("W") for d in query][0] == 10
-    
+
+# --- New test for the member/subset recursive case (covers the caching bug) ---
+def test_subset_member():
+    kb = pl.KnowledgeBase("relations")
+    kb([
+        "member(X, [X|_]).",
+        "member(X, [_|T]) :- member(X, T).",
+        "subset([], _).",
+        "subset([H|T], List) :- member(H, List), subset(T, List)."
+    ])
+
+    # ground queries should return Yes/No
+    assert kb.query(pl.Expr("subset([a,c], [a,b,c])")) == ["Yes"]
+    assert kb.query(pl.Expr("subset([a,d], [a,b,c])")) == ["No"]
+
+    # variable query should return a list of solutions (dicts with 'X' bindings)
+    results = kb.query(pl.Expr("subset(X, [1,2])"))
+    assert isinstance(results, list)
+    assert any(isinstance(r, dict) and 'X' in r for r in results)

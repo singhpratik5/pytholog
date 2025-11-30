@@ -1,7 +1,8 @@
 from .unify import unify
 from .goal import Goal
-from .util import prob_parser
+from .util import prob_parser, substitute_vars
 from .fact import Fact
+import re
        
 def parent_inherits(rl, rulef, currentgoal, Q):
     for f in range(len(rulef)): ## loop over corresponding rules
@@ -10,10 +11,13 @@ def parent_inherits(rl, rulef, currentgoal, Q):
         ## a father goal is the rule we need to search inheriting the domain of the grandfather    
         father = Goal(rulef[f], currentgoal)
         ## unify current rule fact lh with father rhs to get grandfather domain inherited
+        # Use a COPY of currentgoal.domain to avoid polluting it with bindings from failed unifications
+        currentgoal_domain_copy = currentgoal.domain.copy()
         uni = unify(rulef[f].lh, rl,
-                    father.domain, ## saving in father domain
-                    currentgoal.domain) ## using current goal domain (query input)
-        if uni: Q.push(father) ## if unify succeeds add father to queue to be searched
+            father.domain, ## saving in father domain
+            currentgoal_domain_copy) ## using current goal domain (query input)
+        if uni:
+            Q.push(father) ## if unify succeeds add father to queue to be searched
         
 def child_assigned(rl, rulef, currentgoal, Q):   
     if len(currentgoal.domain) == 0 or all(i not in currentgoal.domain for i in rl.terms):
@@ -24,24 +28,34 @@ def child_assigned(rl, rulef, currentgoal, Q):
             child = Goal(rulef[f], currentgoal)
             ### if there is nothing to unify then push to the queue directly
             Q.push(child)
+            
     else:
-        key = currentgoal.domain.get(rl.terms[rl.index])
-        if not key or rulef[0].rhs: first, last = (0, len(rulef))
-        else:
-            first, last = fact_binary_search(rulef, key)
+        # Use a full scan over candidate facts when we have domain info.
+        # Binary-search optimization is fragile when facts contain variables or list-structures,
+        # and can miss valid candidates. A full scan is correct and simpler.
+        first, last = (0, len(rulef))
         for f in range(first, last): ## loop over only corresponding facts
             ## take only the ones with the same predicate and same number of terms
             if len(rl.terms) != len(rulef[f].lh.terms): continue
             ## a child goal from the current fact with current goal as parent    
             child = Goal(rulef[f], currentgoal)
+            
             ## unify current rule fact lh with current goal rhs to get child domain
+            # Use a COPY of currentgoal.domain to avoid polluting it
+            currentgoal_domain_copy = currentgoal.domain.copy()
             uni = unify(rulef[f].lh, rl,
                         child.domain, ## saving in child domain
-                        currentgoal.domain) ## using current goal domain
-            if uni: Q.push(child) ## if unify succeeds add child to queue to be searched
+                        currentgoal_domain_copy) ## using current goal domain
+            
+            if uni:
+                Q.push(child) ## if unify succeeds add child to queue to be searched
+                
             
 def child_to_parent(child, Q): # which is the current goal
     parent = child.parent.__copy__() #to ensure that parent's domain is different without affecting children's
+    
+    # Simply unify parent's current RHS goal with child's LH using their respective domains
+    # This propagates bindings from the child back to the parent
     unify(parent.fact.rhs[parent.ind], ## unify parent goals
           child.fact.lh,  ## with their children to go step down
           parent.domain,
@@ -52,21 +66,34 @@ def child_to_parent(child, Q): # which is the current goal
 
 def prob_calc(currentgoal, rl, Q):
     ## Probabilities and numeric evaluation
-    key, value = prob_parser(currentgoal.domain, rl.to_string(), rl.terms)
-    ## eval the mathematic operation
-    value = eval(value)
-    if value == True: 
-        value = currentgoal.domain.get(key)
-        ## it is true but there is no key in the domain (helpful for ML rules in future)
-        if value is None:
-            value = "Yes"
-    elif value == False:
-        value = "No"
-    currentgoal.domain[key] = value ## assign a new key in the domain with the evaluated value
-    prob_child = Goal(Fact(rl.to_string()),
-                      parent = currentgoal,
-                      domain = currentgoal.domain)
-    Q.push(prob_child)
+    rule_str = rl.to_string()
+    
+    # Check if this is an assignment (has "is") or just a constraint check
+    if "is" in rule_str:
+        # Assignment: Var is Expression
+        key, value = prob_parser(currentgoal.domain, rule_str, rl.terms)
+        value = eval(value)
+        currentgoal.domain[key] = value  # Bind the variable to the result
+        prob_child = Goal(Fact(rule_str),
+                          parent = currentgoal,
+                          domain = currentgoal.domain)
+        Q.push(prob_child)
+    else:
+        # Constraint check: Expression (e.g., X > 5)
+        # Substitute all variables and evaluate
+        value = rule_str
+        for term in rl.terms:
+            if term in currentgoal.domain:
+                value = re.sub(term, str(currentgoal.domain[term]), value)
+        result = eval(value)
+        
+        # Only continue if the constraint is satisfied
+        if result:
+            prob_child = Goal(Fact(rule_str),
+                              parent = currentgoal,
+                              domain = currentgoal.domain)
+            Q.push(prob_child)
+        # If result is False, don't push anything - this path fails
 
 
 def fact_binary_search(facts, key):
